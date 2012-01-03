@@ -24,50 +24,69 @@ function sampleTrain($classifier)
  * Пример использования наивного байесовского классификатора
  */
 
-echo " ==[ NaiveBayes ]== \n";
-$c = new Classifier_NaiveBayes(); //создаем
-sampleTrain($c); //тренируем на тестовом наборе документов
+echo "-==[ NaiveBayes ]==-\n";
 
-// классифицируем новые документы
-print $c->classify(explode(' ','quick rabbit'))."\n"; 
+// Создаем классификатор
+$c = new Classifier_NaiveBayes('example');
+
+// Тренируем на тестовом наборе документов
+sampleTrain($c);
+
+// Классифицируем новые документы
+
+$features = explode(' ','quick rabbit');
+print $c->classify($features)."\n"; 
 //$ good
-print $c->classify(explode(' ','quick money'))."\n";
+
+$features = explode(' ','quick money');
+print $c->classify($features)."\n";
 //$ bad
 
-// устанавливаем порог: чтобы документ попал в категорию,
-//вероятность для неё должна быть более чем в 3 раза выше, чем для остальных
+// Займемся тонкой настройкой.
+// Устанавливаем порог: чтобы документ попал в категорию,
+// вероятность для неё должна быть более чем в 3 раза выше, чем для остальных
 $c->setThreshold('bad', 3);
-print $c->classify(explode(' ','quick money'))."\n";
+$features = explode(' ','quick money');
+print $c->classify($features)."\n";
 //$ unknown
+
+// Опс. Данных оказалось недостаточно для классификации.
 
 //дополнительно тренируем классификатор
 for($i=0; $i<10; $i++)
 {
 	sampleTrain($c);
 }
-print $c->classify(explode(' ','quick money'))."\n"; //теперь он сможет определить документ как "плохой"
+// Теперь он сможет определить документ как "плохой"
+$features = explode(' ','quick money');
+print $c->classify($features)."\n"; 
 //$ bad
-
 
 /**
  * Пример использования классификатора, работающего по методу Фишера
  */
 
-echo " ==[ Fisher ]== \n";
-$c = new Classifier_Fisher(); //создаем
-sampleTrain($c); //тренируем на тестовом наборе документов
+echo "-==[ Fisher ]==-\n";
 
-// классифицируем новые документы
+// Создаем классификатор
+// Он подключится к той же БД и будет использовать уже накопленные данные
+$c = new Classifier_Fisher('example');
+
+// Классифицируем новые документы
 print $c->classify(explode(' ','quick rabbit'))."\n"; 
 //$ good
 print $c->classify(explode(' ','quick money'))."\n";
 //$ bad
 
-//Устанавливаем нижние границы вероятностей категорий.
-//Если вероятность ниже границы, документ в категорию не попадет
+// Займемся тонкой настройкой.
+// Устанавливаем нижние границы вероятностей категорий.
+// Если вероятность ниже границы, документ в категорию не попадет
 $c->setMinimun('bad',0.8);
 print $c->classify(explode(' ','quick money'))."\n";
 //$ good
 $c->setMinimun('good',0.5);
 print $c->classify(explode(' ','quick money'))."\n";
 //$ unknown
+
+//Сбрасываем данные, чтобы при следующем запуске скрипта-примера классификатор учился заново.
+$c->resetDb();

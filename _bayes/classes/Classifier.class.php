@@ -7,16 +7,33 @@
  */
 class Classifier
 {
+	
+	/**
+	 * @var strin имя (ник) проекта
+	 */
+	protected $projectName = '';
+	
+	/**
+	 * @var PDO объект для работы с БД
+	 */
+	protected $db;
 
 	/**
-	 * @var array счетчики комбинаций признак/категория
+	 * Создание классификатора
+	 * 
+	 * @param string $projectName "ник" проекта по классификации, 
+	 * 								по нему при следующих запусках можно получить 
+	 * 								накопленные в ходе работы данные о признаках
 	 */
-	protected $fc = array();
-	/**
-	 * @var array счетчики документов в каждой категори
-	 */
-	protected $cc = array();
-
+	public function __construct($projectName)
+	{
+		if(!$projectName)
+		{
+			throw new Exception('No project name given');
+		}
+		
+		$this->initDb('$projectName');
+	}
 
 	/**
 	 * Обучение классификатора
@@ -112,10 +129,14 @@ class Classifier
 			throw new Exception('No feature or category given');
 		}
 
-		if(isset($this->fc[$feature][$category]))
+		$sql = 'SELECT count FROM fc WHERE feature=:f AND category=:cat';
+		$sth = $this->db->prepare($sql, array(PDO::ATTR_CURSOR => PDO::CURSOR_FWDONLY));
+		$sth->execute(array(':f' => $feature, ':cat' => $category));
+		$countRow = $sth->fetch();
+		
+		if($countRow)
 		{
-				
-			return $this->fc[$feature][$category];
+			return $countRow['count'];
 		}
 
 		return 0;
@@ -134,10 +155,15 @@ class Classifier
 		{
 			throw new Exception('No category given');
 		}
-
-		if(isset($this->cc[$category]))
+		
+		$sql = 'SELECT count FROM cc WHERE category=:cat';
+		$sth = $this->db->prepare($sql, array(PDO::ATTR_CURSOR => PDO::CURSOR_FWDONLY));
+		$sth->execute(array(':cat' => $category));
+		$countRow = $sth->fetch();
+		
+		if($countRow)
 		{
-			return $this->cc[$category];
+			return $countRow['count'];
 		}
 
 		return 0;
@@ -148,18 +174,33 @@ class Classifier
 	 * Общее число образцов
 	 *
 	 */
-	protected function totalCount()
+	public function totalCount()
 	{
-		return array_sum(array_values($this->cc));
+		$sql = 'SELECT sum(count) FROM cc';
+		$sth = $this->db->prepare($sql, array(PDO::ATTR_CURSOR => PDO::CURSOR_FWDONLY));
+		$sth->execute();
+		$totalCount = $sth->fetch();
+
+		if($totalCount[0])
+		{
+			return $totalCount[0];
+		}
+		
+		return 0;
 	}
 
 	/**
 	 * Список всех категорий
 	 *
 	 */
-	protected function categories()
+	public function categories()
 	{
-		return array_keys($this->cc);
+		$sql = 'SELECT category FROM cc';
+		$sth = $this->db->prepare($sql, array(PDO::ATTR_CURSOR => PDO::CURSOR_FWDONLY));
+		$sth->execute();
+		$categories = $sth->fetchAll(PDO::FETCH_COLUMN);
+
+		return array_values($categories);
 	}
 
 	/**
@@ -174,18 +215,21 @@ class Classifier
 		{
 			throw new Exception('No feature or category given');
 		}
-
-		if(!isset($this->fc[$feature]))
+		
+		$count = $this->fCount($feature, $category);
+		if($count == 0)
 		{
-			$this->fc[$feature] = array();
+			$sql = 'INSERT INTO fc values (:f,:cat, 1);';
+			$sth = $this->db->prepare($sql);
+			$sth->execute(array(':f' => $feature, ':cat' => $category));
+		}
+		else
+		{
+			$sql = 'UPDATE fc SET count =:count WHERE feature=:f AND category=:cat;';
+			$sth = $this->db->prepare($sql);
+			$sth->execute(array(':count' => $count+1, ':f' => $feature, ':cat' => $category));
 		}
 
-		if(!isset($this->fc[$feature][$category]))
-		{
-			$this->fc[$feature][$category] = 0;
-		}
-
-		$this->fc[$feature][$category]++;
 	}
 
 	/**
@@ -199,12 +243,60 @@ class Classifier
 		{
 			throw new Exception('No category given');
 		}
-
-		if(!isset($this->cc[$category]))
+		
+		$count = $this->catCount($category);
+		if($count==0)
 		{
-			$this->cc[$category] = 0;
+			$sql = 'INSERT INTO cc values (:cat, 1);';
+			$sth = $this->db->prepare($sql);
+			$sth->execute(array(':cat' => $category));
+		}
+		else
+		{
+			$sql = 'UPDATE cc SET count =:count WHERE category=:cat;';
+			$sth = $this->db->prepare($sql);
+			$sth->execute(array(':count' => $count+1, ':cat' => $category));
 		}
 
-		$this->cc[$category]++;
+	}
+	
+	/**
+	 * Подключение к базе с ранее накопленными данными о признаках
+	 * или создание новой, если еще нет.
+	 * 
+	 * @param string $projectName "ник" проекта по классификации, 
+	 * 								по нему можно потом получить данные из базы
+	 */
+	protected function initDb($projectName)
+	{
+		if(!$projectName)
+		{
+			throw new Exception('No project name given');
+		}
+		
+		$this->projectName = $projectName;
+		$this->db = new PDO('sqlite:'.PROJECT_ROOT.'/db/'.$this->projectName.'.db');
+		$this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		// таблица со счётчиками комбинаций признак-категория
+		$this->db->exec('CREATE TABLE IF NOT EXISTS 
+							fc(feature varchar(255), category varchar(255), count int,
+							CONSTRAINT uc_fc UNIQUE (feature, category) ON CONFLICT IGNORE
+							)');
+		// таблица со счетчиками документов в каждой категори
+		$this->db->exec('CREATE TABLE IF NOT EXISTS 
+							cc(category varchar(255), count int,
+							PRIMARY KEY (category) ON CONFLICT IGNORE
+							)');	
+		return true;
+	}
+	
+	/**
+	 * Сбросить все накопленные в рамках проекта данные о признаках
+	 */
+	public function resetDb()
+	{
+		unset($this->db);
+		unlink(PROJECT_ROOT.'/db/'.$this->projectName.'.db');
+		$this->initDb($this->projectName);
 	}
 }

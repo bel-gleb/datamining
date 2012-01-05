@@ -26,7 +26,7 @@ class Classifier_Fisher extends Classifier
 	{
 		if(!is_array($features))
 		{
-			throw new Exception('No features');
+			throw new Exception('No features given');
 		}
 		
 		//цикл для поиска наилучшего результата

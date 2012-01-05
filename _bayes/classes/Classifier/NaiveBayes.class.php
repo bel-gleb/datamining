@@ -23,7 +23,7 @@ class Classifier_NaiveBayes extends Classifier
 	{
 		if(!is_array($features))
 		{
-			throw new Exception('No features');
+			throw new Exception('No features given');
 		}
 		
 		$probs = array();
@@ -33,13 +33,14 @@ class Classifier_NaiveBayes extends Classifier
 		foreach ($this->categories() as $cat)
 		{
 			$probs[$cat] = $this->prob($features, $cat);
+
 			if($probs[$cat]>$max)
 			{
 				$max = $probs[$cat];
 				$best = $cat;
 			}
 		}
-		
+
 		//убедиться, что найденная вероятность больше чем threshold*следующая по величине
 		foreach($probs as $cat=>$catProb)
 		{

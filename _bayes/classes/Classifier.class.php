@@ -32,7 +32,7 @@ class Classifier
 			throw new Exception('No project name given');
 		}
 		
-		$this->initDb('$projectName');
+		$this->initDb($projectName);
 	}
 
 	/**
@@ -101,7 +101,6 @@ class Classifier
 		}
 
 		$basicProb = $this->$probeFunction($feature, $category);
-
 		//Сколько раз этот признак встречался во всех категориях 
 		$totals = 0;
 		foreach($this->categories() as $cat)
@@ -111,7 +110,6 @@ class Classifier
 
 		//Вычислить средневзвешенное значение
 		$bp = (($weight*$assumedProb)+($totals*$basicProb))/($weight+$totals);
-
 		return $bp;
 	}
 
